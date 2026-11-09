@@ -22,8 +22,8 @@ main { max-width: 860px; margin: 0 auto; padding: 0 12px 40px; }
 .tab.active { background: #3a2f10; border-color: #f5c542;
   color: #f5c542; }
 .stage { width: 100%; height: 340px; border-radius: 10px;
-  background: radial-gradient(ellipse at 50% 38%, #1d1832 0%,
-  #100d1e 62%, #0b0a14 100%); overflow: hidden; position: relative; }
+  background: radial-gradient(ellipse at 50% 38%, #1e1936 0%,
+  #0c0919 58%, #04040b 100%); overflow: hidden; position: relative; }
 .stage canvas { display: block; }
 body.phone .stage { height: 128px; }
 .pieceinfo { background: #12101f; border: 1px solid #2a2542;
@@ -3914,15 +3914,21 @@ function initStage() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.05;
   stageEl.appendChild(renderer.domElement);
   scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a1426, 0.95));
-  var key = new THREE.DirectionalLight(0xfff2dd, 1.15);
-  key.position.set(2.5, 4, 3);
+  /* THE UNIFIED STUDIO RIG (Nov 9, 2026 lighting-parity pass) --
+     the same values on every viewer page and in the QA sheet
+     renderer (render_v2_check.py): strong warm key, cool rim
+     that separates the figure from the backdrop, low hemisphere
+     ambient, ACES exposure 1.05. Dark materials stay dark and
+     emissives pop against them. */
+  scene.add(new THREE.HemisphereLight(0x8ea6cf, 0x201812, 0.42));
+  var key = new THREE.DirectionalLight(0xffe9c4, 1.35);
+  key.position.set(3.0, 4.6, 3.4);
   scene.add(key);
-  var rim = new THREE.DirectionalLight(0x88aaff, 0.4);
-  rim.position.set(-3, 2, -2.5);
+  var rim = new THREE.DirectionalLight(0x9fc4ff, 0.95);
+  rim.position.set(-3.4, 2.6, -3.2);
   scene.add(rim);
   camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   // a dark hex tile under each figure, game-style
@@ -3944,11 +3950,35 @@ function figureError(piece, opt, err) {
     ') — the other option still shows.';
 }
 
+/* Lighting-parity fix (Nov 9, 2026): the vendored GLTFLoader
+   leaves baseColorFactor / emissiveFactor exactly as authored,
+   but the renderer outputs sRGB -- so authored (display-space)
+   colors were gamma-lifted a second time on the way out and
+   dark pieces rendered washed tan (Cindermaw's hide) while the
+   QA sheets, which use the authored values directly, showed
+   near-black. Convert each loaded material once so the page
+   honors the authored colors. Page-authored materials (hex
+   tiles) are NOT converted -- they live in three.js space. */
+function honorAuthoredColors(root) {
+  var seen = [];
+  root.traverse(function (o) {
+    if (!o.material) return;
+    var mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach(function (m) {
+      if (seen.indexOf(m) >= 0) return;
+      seen.push(m);
+      if (m.color) m.color.convertSRGBToLinear();
+      if (m.emissive) m.emissive.convertSRGBToLinear();
+    });
+  });
+}
+
 function loadFigure(piece, opt) {
   return new Promise(function (resolve) {
     var bytes = b64ToBytes(PAYLOADS[piece + '-' + opt]);
     new THREE.GLTFLoader().parse(bytes.buffer, '', function (gltf) {
       try {
+        honorAuthoredColors(gltf.scene);
         var meta = META[piece];
         var g = new THREE.Group();
         g.add(gltf.scene);
