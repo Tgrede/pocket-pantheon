@@ -11,7 +11,9 @@
   h1{font-size:22px;margin:4px 0 2px;color:#f5c542;font-weight:normal;
      letter-spacing:.04em;}
   .sub{color:#9a94a8;font-size:14px;margin-bottom:12px;line-height:1.45;}
-  #stage{position:relative;margin:0 auto;transition:width .3s,height .3s;}
+  #stage{position:relative;margin:0 auto;transition:width .3s,height .3s;
+    background:radial-gradient(ellipse at 50% 38%, #1a1630 0%,
+    #0b0918 58%, #04040b 100%);}
   #stage.phone{border:2px solid #3a3f55;border-radius:28px;padding:10px 6px;
     background:#05060c;}
   canvas{display:block;border-radius:6px;}
@@ -3939,26 +3941,35 @@ var HEIGHTS = [2.26, 2.20, 2.36, 2.05, 1.92, 1.28,
 /* ---------------- scene ---------------- */
 var stage = document.getElementById('stage');
 var scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d0f1e);
-scene.fog = new THREE.Fog(0x0d0f1e, 40, 110);
+/* No scene.background: the renderer is transparent and the
+   stage's CSS radial gradient is the backdrop (falloff to near
+   black at the edges), same family as the chooser/hounds pages
+   (Nov 9, 2026 lighting-parity pass). Fog still fades depth
+   toward the gradient's edge tone. */
+scene.fog = new THREE.Fog(0x0a0a16, 40, 110);
 var camera = new THREE.PerspectiveCamera(40, 1120 / 600, 0.1, 140);
-var renderer = new THREE.WebGLRenderer({ antialias: true });
+var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 stage.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0x93a7cc, 0x2c2118, 0.75));
-var sun = new THREE.DirectionalLight(0xfff1d6, 1.15);
-sun.position.set(4.5, 7.5, 5.5);
+/* THE UNIFIED STUDIO RIG (Nov 9, 2026 lighting-parity pass) --
+   same values as the chooser/hounds pages and the QA sheet
+   renderer: warm key 0xffe9c4 x1.35, cool rim 0x9fc4ff x0.95,
+   hemisphere ambient x0.42. Positions are the shared light
+   directions scaled to this bigger stage. */
+scene.add(new THREE.HemisphereLight(0x8ea6cf, 0x201812, 0.42));
+var sun = new THREE.DirectionalLight(0xffe9c4, 1.35);
+sun.position.set(5.1, 7.8, 5.8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 scene.add(sun);
-var rim = new THREE.DirectionalLight(0x6fb7ff, 0.5);
-rim.position.set(-6, 3.5, -5);
+var rim = new THREE.DirectionalLight(0x9fc4ff, 0.95);
+rim.position.set(-7.0, 5.4, -6.6);
 scene.add(rim);
 
 var ground = new THREE.Mesh(
@@ -4046,6 +4057,16 @@ function placeGLB(b64, slot, mode){
           if (o.isMesh){
             o.castShadow = true;
             o.material = o.material.clone();  // never mutate a shared material
+            /* Lighting-parity fix (Nov 9, 2026): honor the
+               authored (display-space) colors -- the vendored
+               loader leaves them raw while the renderer outputs
+               sRGB, which gamma-lifted dark pieces to a washed
+               tan on the page. Convert once, after the clone. */
+            (Array.isArray(o.material) ? o.material : [o.material])
+              .forEach(function(m){
+                if (m.color) m.color.convertSRGBToLinear();
+                if (m.emissive) m.emissive.convertSRGBToLinear();
+              });
           }
         });
         fig.userData.slot = slot;
